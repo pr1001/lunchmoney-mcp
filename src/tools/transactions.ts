@@ -38,17 +38,28 @@ export function registerTransactionTools(server: McpServer) {
                 offset: z
                     .number()
                     .optional()
-                    .describe("Number of transactions to skip"),
+                    .describe(
+                        "Number of transactions to skip (MCP server-side pagination)"
+                    ),
                 limit: z
                     .number()
                     .optional()
                     .describe(
-                        "Maximum number of transactions to return (max 500)"
+                        "Maximum transactions to return (default: 1000, MCP server-side pagination)"
                     ),
                 debit_as_negative: z
                     .boolean()
                     .optional()
                     .describe("Pass true to return debit amounts as negative"),
+                include_plaid_metadata: z
+                    .boolean()
+                    .optional()
+                    .default(false)
+                    .describe(
+                        "Include plaid_metadata in response (default: false). " +
+                        "Set to true when you need original transaction names, " +
+                        "merchant info, or Plaid category suggestions for corrections."
+                    ),
             }),
         },
         async ({ input }) => {
@@ -104,7 +115,26 @@ export function registerTransactionTools(server: McpServer) {
             }
 
             const data = await response.json();
-            const transactions: Transaction[] = data.transactions;
+            let transactions: Transaction[] = data.transactions;
+            const totalCount = transactions.length;
+
+            // MCP server-side pagination (since LunchMoney API ignores limit/offset)
+            const offset = input.offset ?? 0;
+            const limit = input.limit ?? 1000;
+
+            if (offset > 0) {
+                transactions = transactions.slice(offset);
+            }
+
+            const hasMore = transactions.length > limit;
+            if (limit < transactions.length) {
+                transactions = transactions.slice(0, limit);
+            }
+
+            // Strip plaid_metadata if not requested (saves tokens)
+            if (!input.include_plaid_metadata) {
+                transactions = transactions.map(({ plaid_metadata, ...rest }) => rest as Transaction);
+            }
 
             return {
                 content: [
@@ -112,7 +142,10 @@ export function registerTransactionTools(server: McpServer) {
                         type: "text",
                         text: JSON.stringify({
                             transactions,
-                            has_more: data.has_more,
+                            total_count: totalCount,
+                            offset,
+                            limit,
+                            has_more: hasMore,
                         }),
                     },
                 ],
@@ -622,6 +655,92 @@ export function registerTransactionTools(server: McpServer) {
                     {
                         type: "text",
                         text: "Transaction group deleted successfully",
+                    },
+                ],
+            };
+        }
+    );
+
+    server.tool(
+        "search_transactions",
+        "Search transactions by payee name, notes, or original name. " +
+        "Performs local filtering on API results. Use narrow date ranges for best performance.",
+        {
+            input: z.object({
+                start_date: z
+                    .string()
+                    .describe("Start date in YYYY-MM-DD format"),
+                end_date: z.string().describe("End date in YYYY-MM-DD format"),
+                query: z
+                    .string()
+                    .describe(
+                        "Search query - matches against payee, notes, and original_name (case-insensitive)"
+                    ),
+                category_id: z
+                    .number()
+                    .optional()
+                    .describe("Filter by category ID"),
+                include_plaid_metadata: z
+                    .boolean()
+                    .optional()
+                    .default(false)
+                    .describe(
+                        "Include plaid_metadata in response (default: false)"
+                    ),
+            }),
+        },
+        async ({ input }) => {
+            const { baseUrl, lunchmoneyApiToken } = getConfig();
+
+            const params = new URLSearchParams({
+                start_date: input.start_date,
+                end_date: input.end_date,
+            });
+
+            if (input.category_id !== undefined)
+                params.append("category_id", input.category_id.toString());
+
+            const response = await fetch(`${baseUrl}/transactions?${params}`, {
+                headers: {
+                    Authorization: `Bearer ${lunchmoneyApiToken}`,
+                },
+            });
+
+            if (!response.ok) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: `Failed to search transactions: ${response.statusText}`,
+                        },
+                    ],
+                };
+            }
+
+            const data = await response.json();
+            const query = input.query.toLowerCase();
+
+            let transactions: Transaction[] = data.transactions.filter(
+                (t: Transaction) =>
+                    t.payee?.toLowerCase().includes(query) ||
+                    t.notes?.toLowerCase().includes(query) ||
+                    t.original_name?.toLowerCase().includes(query)
+            );
+
+            // Strip plaid_metadata if not requested (saves tokens)
+            if (!input.include_plaid_metadata) {
+                transactions = transactions.map(({ plaid_metadata, ...rest }) => rest as Transaction);
+            }
+
+            return {
+                content: [
+                    {
+                        type: "text",
+                        text: JSON.stringify({
+                            query: input.query,
+                            match_count: transactions.length,
+                            transactions,
+                        }),
                     },
                 ],
             };

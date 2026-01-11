@@ -1,10 +1,25 @@
-# LunchMoney MCP Server
+# LunchMoney MCP Server (Enhanced Fork)
 
-A Model Context Protocol (MCP) server implementation for [LunchMoney](https://lunchmoney.app/), providing programmatic access to personal finance management through LunchMoney's API. Also available as a Desktop Extension Tool (DXT) for easy installation in Claude Desktop.
+An enhanced fork of the [original LunchMoney MCP server](https://github.com/akutishevsky/lunchmoney-mcp) with server-side pagination, search capabilities, and token optimization.
 
-<a href="https://glama.ai/mcp/servers/@akutishevsky/lunchmoney-mcp">
-  <img width="380" height="200" src="https://glama.ai/mcp/servers/@akutishevsky/lunchmoney-mcp/badge" alt="LunchMoney Server MCP server" />
-</a>
+## Enhancements in This Fork
+
+### Server-Side Pagination
+The LunchMoney API currently ignores `limit` and `offset` parameters ([issue #83](https://github.com/lunch-money/developers/issues/83)). This fork implements **MCP server-side pagination** that actually works:
+- `limit` - Maximum transactions to return (default: 1000)
+- `offset` - Number of transactions to skip
+- Response includes `total_count`, `offset`, `limit`, and accurate `has_more`
+
+### Token Optimization
+- **`include_plaid_metadata`** parameter (default: `false`) - Strip verbose Plaid metadata from responses to reduce token usage by ~40-60%
+- Set to `true` when you need original transaction names, merchant info, or Plaid category suggestions for corrections
+
+### New Search Tool
+- **`search_transactions`** - Search by payee name, notes, or original_name with case-insensitive matching
+- Performs local filtering on API results
+- Use narrow date ranges for best performance
+
+---
 
 ## Overview
 
@@ -188,7 +203,7 @@ Here are some example prompts you can use with the LunchMoney MCP server:
 
 ### Transaction Tools
 
--   `get_transactions` - List transactions with extensive filtering options
+-   `get_transactions` - List transactions with extensive filtering options, server-side pagination, and optional plaid_metadata
 -   `get_single_transaction` - Get detailed transaction information
 -   `create_transactions` - Create new transactions
 -   `update_transaction` - Update existing transaction
@@ -196,6 +211,7 @@ Here are some example prompts you can use with the LunchMoney MCP server:
 -   `get_transaction_group` - Get transaction group details
 -   `create_transaction_group` - Create a transaction group
 -   `delete_transaction_group` - Delete a transaction group
+-   `search_transactions` - Search transactions by payee, notes, or original_name (local filtering)
 
 ### Recurring Items Tools
 
