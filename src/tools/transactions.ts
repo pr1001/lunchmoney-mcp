@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { encode as toonEncode } from "@toon-format/toon";
 import { getConfig } from "../config.js";
 import { Transaction } from "../types.js";
 
@@ -59,6 +60,14 @@ export function registerTransactionTools(server: McpServer) {
                         "Include plaid_metadata in response (default: false). " +
                         "Set to true when you need original transaction names, " +
                         "merchant info, or Plaid category suggestions for corrections."
+                    ),
+                response_format: z
+                    .enum(["json", "toon"])
+                    .optional()
+                    .default("json")
+                    .describe(
+                        "Response format: 'json' (default) or 'toon' (Token-Oriented Object Notation). " +
+                        "TOON reduces token usage by ~40% for uniform arrays. Best with include_plaid_metadata:true."
                     ),
             }),
         },
@@ -131,22 +140,41 @@ export function registerTransactionTools(server: McpServer) {
                 transactions = transactions.slice(0, limit);
             }
 
-            // Strip plaid_metadata if not requested (saves tokens)
-            if (!input.include_plaid_metadata) {
+            // Handle plaid_metadata: parse if included, strip if not
+            if (input.include_plaid_metadata) {
+                // Parse plaid_metadata JSON strings into objects
+                transactions = transactions.map((t) => {
+                    if (t.plaid_metadata && typeof t.plaid_metadata === "string") {
+                        try {
+                            return { ...t, plaid_metadata: JSON.parse(t.plaid_metadata) };
+                        } catch {
+                            return t;
+                        }
+                    }
+                    return t;
+                });
+            } else {
+                // Strip plaid_metadata entirely (saves tokens)
                 transactions = transactions.map(({ plaid_metadata, ...rest }) => rest as Transaction);
             }
+
+            const responseData = {
+                transactions,
+                total_count: totalCount,
+                offset,
+                limit,
+                has_more: hasMore,
+            };
+
+            const responseText = input.response_format === "toon"
+                ? toonEncode(responseData)
+                : JSON.stringify(responseData);
 
             return {
                 content: [
                     {
                         type: "text",
-                        text: JSON.stringify({
-                            transactions,
-                            total_count: totalCount,
-                            offset,
-                            limit,
-                            has_more: hasMore,
-                        }),
+                        text: responseText,
                     },
                 ],
             };
@@ -687,6 +715,14 @@ export function registerTransactionTools(server: McpServer) {
                     .describe(
                         "Include plaid_metadata in response (default: false)"
                     ),
+                response_format: z
+                    .enum(["json", "toon"])
+                    .optional()
+                    .default("json")
+                    .describe(
+                        "Response format: 'json' (default) or 'toon' (Token-Oriented Object Notation). " +
+                        "TOON reduces token usage by ~40% for uniform arrays."
+                    ),
             }),
         },
         async ({ input }) => {
@@ -727,20 +763,39 @@ export function registerTransactionTools(server: McpServer) {
                     t.original_name?.toLowerCase().includes(query)
             );
 
-            // Strip plaid_metadata if not requested (saves tokens)
-            if (!input.include_plaid_metadata) {
+            // Handle plaid_metadata: parse if included, strip if not
+            if (input.include_plaid_metadata) {
+                // Parse plaid_metadata JSON strings into objects
+                transactions = transactions.map((t) => {
+                    if (t.plaid_metadata && typeof t.plaid_metadata === "string") {
+                        try {
+                            return { ...t, plaid_metadata: JSON.parse(t.plaid_metadata) };
+                        } catch {
+                            return t;
+                        }
+                    }
+                    return t;
+                });
+            } else {
+                // Strip plaid_metadata entirely (saves tokens)
                 transactions = transactions.map(({ plaid_metadata, ...rest }) => rest as Transaction);
             }
+
+            const responseData = {
+                query: input.query,
+                match_count: transactions.length,
+                transactions,
+            };
+
+            const responseText = input.response_format === "toon"
+                ? toonEncode(responseData)
+                : JSON.stringify(responseData);
 
             return {
                 content: [
                     {
                         type: "text",
-                        text: JSON.stringify({
-                            query: input.query,
-                            match_count: transactions.length,
-                            transactions,
-                        }),
+                        text: responseText,
                     },
                 ],
             };
