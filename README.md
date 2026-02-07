@@ -1,14 +1,13 @@
 # LunchMoney MCP Server (Enhanced Fork)
 
-An enhanced fork of the [original LunchMoney MCP server](https://github.com/akutishevsky/lunchmoney-mcp) with server-side pagination, search capabilities, and token optimization.
+An enhanced fork of the [original LunchMoney MCP server](https://github.com/akutishevsky/lunchmoney-mcp) with search capabilities and token optimization.
 
 ## Enhancements in This Fork
 
-### Server-Side Pagination
-The LunchMoney API currently ignores `limit` and `offset` parameters ([issue #83](https://github.com/lunch-money/developers/issues/83)). This fork implements **MCP server-side pagination** that actually works:
-- `limit` - Maximum transactions to return (default: 1000)
-- `offset` - Number of transactions to skip
-- Response includes `total_count`, `offset`, `limit`, and accurate `has_more`
+### Pagination
+The API's `limit` and `offset` parameters are passed through directly. Response includes `count`, `has_more`, and the pagination params you specified.
+
+> **Note:** The API had a regression where these params were ignored ([issue #83](https://github.com/lunch-money/developers/issues/83)), which was fixed in Jan 2026.
 
 ### Token Optimization
 - **`include_plaid_metadata`** parameter (default: `false`) - Strip verbose Plaid metadata from responses to reduce token usage by ~40-60%
@@ -203,7 +202,7 @@ Here are some example prompts you can use with the LunchMoney MCP server:
 
 ### Transaction Tools
 
--   `get_transactions` - List transactions with extensive filtering options, server-side pagination, and optional plaid_metadata
+-   `get_transactions` - List transactions with extensive filtering, pagination, and optional plaid_metadata
 -   `get_single_transaction` - Get detailed transaction information
 -   `create_transactions` - Create new transactions
 -   `update_transaction` - Update existing transaction

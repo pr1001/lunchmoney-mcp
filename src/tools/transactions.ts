@@ -40,13 +40,13 @@ export function registerTransactionTools(server: McpServer) {
                     .number()
                     .optional()
                     .describe(
-                        "Number of transactions to skip (MCP server-side pagination)"
+                        "Number of transactions to skip"
                     ),
                 limit: z
                     .number()
                     .optional()
                     .describe(
-                        "Maximum transactions to return (default: 1000, MCP server-side pagination)"
+                        "Maximum transactions to return"
                     ),
                 debit_as_negative: z
                     .boolean()
@@ -122,20 +122,9 @@ export function registerTransactionTools(server: McpServer) {
 
             const data = await response.json();
             let transactions: Transaction[] = data.transactions;
-            const totalCount = transactions.length;
-
-            // MCP server-side pagination (since LunchMoney API ignores limit/offset)
-            const offset = input.offset ?? 0;
-            const limit = input.limit ?? 1000;
-
-            if (offset > 0) {
-                transactions = transactions.slice(offset);
-            }
-
-            const hasMore = transactions.length > limit;
-            if (limit < transactions.length) {
-                transactions = transactions.slice(0, limit);
-            }
+            const returnedCount = transactions.length;
+            const limit = input.limit;
+            const hasMore = limit !== undefined && returnedCount === limit;
 
             // Handle plaid_metadata: parse if included, strip if not
             if (input.include_plaid_metadata) {
@@ -155,17 +144,17 @@ export function registerTransactionTools(server: McpServer) {
                 transactions = transactions.map(({ plaid_metadata, ...rest }) => rest as Transaction);
             }
 
-            const responseData = {
+            const responseData: Record<string, unknown> = {
                 transactions,
-                total_count: totalCount,
-                offset,
-                limit,
+                count: transactions.length,
                 has_more: hasMore,
             };
+            if (input.offset !== undefined) responseData.offset = input.offset;
+            if (limit !== undefined) responseData.limit = limit;
 
             return formatResponse(responseData, input.response_format, input.response_mode, {
                 toolName: "transactions",
-                summary: `${transactions.length} transactions (${totalCount} total, offset ${offset}, has_more: ${hasMore})`,
+                summary: `${transactions.length} transactions${hasMore ? " (more available)" : ""}`,
             });
         }
     );
