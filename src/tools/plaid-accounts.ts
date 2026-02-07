@@ -1,15 +1,22 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
 import { getConfig } from "../config.js";
 import { PlaidAccount } from "../types.js";
+import { responseFormatSchema, responseModeSchema, formatResponse } from "../response.js";
 
 export function registerPlaidAccountTools(server: McpServer) {
     server.tool(
         "get_all_plaid_accounts",
         "Get a list of all Plaid accounts associated with the user",
-        {},
-        async () => {
+        {
+            input: z.object({
+                response_format: responseFormatSchema,
+                response_mode: responseModeSchema,
+            }),
+        },
+        async ({ input }) => {
             const { baseUrl, lunchmoneyApiToken } = getConfig();
-            
+
             const response = await fetch(`${baseUrl}/plaid_accounts`, {
                 headers: {
                     Authorization: `Bearer ${lunchmoneyApiToken}`,
@@ -29,15 +36,11 @@ export function registerPlaidAccountTools(server: McpServer) {
 
             const data = await response.json();
             const plaidAccounts: PlaidAccount[] = data.plaid_accounts;
-            
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: JSON.stringify(plaidAccounts),
-                    },
-                ],
-            };
+
+            return formatResponse(plaidAccounts, input.response_format, input.response_mode, {
+                toolName: "plaid-accounts",
+                summary: `${plaidAccounts.length} Plaid accounts`,
+            });
         }
     );
 

@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getConfig } from "../config.js";
 import { Category, CategoryChild } from "../types.js";
+import { responseFormatSchema, responseModeSchema, formatResponse } from "../response.js";
 
 export function registerCategoryTools(server: McpServer) {
     server.tool(
@@ -15,6 +16,8 @@ export function registerCategoryTools(server: McpServer) {
                     .describe(
                         "Can either flattened or nested. If flattened, returns a singular array of categories, ordered alphabetically. If nested, returns top-level categories (either category groups or categories not part of a category group) in an array. Subcategories are nested within the category group under the property children."
                     ),
+                response_format: responseFormatSchema,
+                response_mode: responseModeSchema,
             }),
         },
         async ({ input }) => {
@@ -37,16 +40,13 @@ export function registerCategoryTools(server: McpServer) {
                 };
             }
 
-            const categories: Category[] = await response.json();
-            
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: JSON.stringify(categories),
-                    },
-                ],
-            };
+            const data = await response.json();
+            const categories: Category[] = data.categories ?? data;
+
+            return formatResponse(categories, input.response_format, input.response_mode, {
+                toolName: "categories",
+                summary: `${categories.length} categories`,
+            });
         }
     );
 

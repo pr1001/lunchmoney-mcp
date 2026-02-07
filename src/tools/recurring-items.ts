@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getConfig } from "../config.js";
 import { RecurringItem } from "../types.js";
+import { responseFormatSchema, responseModeSchema, formatResponse } from "../response.js";
 
 export function registerRecurringItemsTools(server: McpServer) {
     server.tool(
@@ -21,22 +22,24 @@ export function registerRecurringItemsTools(server: McpServer) {
                     .boolean()
                     .optional()
                     .describe("Pass true to return debit amounts as negative"),
+                response_format: responseFormatSchema,
+                response_mode: responseModeSchema,
             }),
         },
         async ({ input }) => {
             const { baseUrl, lunchmoneyApiToken } = getConfig();
-            
+
             const params = new URLSearchParams();
             if (input.start_date) params.append("start_date", input.start_date);
             if (input.end_date) params.append("end_date", input.end_date);
             if (input.debit_as_negative !== undefined) {
                 params.append("debit_as_negative", input.debit_as_negative.toString());
             }
-            
-            const url = params.toString() 
+
+            const url = params.toString()
                 ? `${baseUrl}/recurring_items?${params}`
                 : `${baseUrl}/recurring_items`;
-                
+
             const response = await fetch(url, {
                 headers: {
                     Authorization: `Bearer ${lunchmoneyApiToken}`,
@@ -54,16 +57,13 @@ export function registerRecurringItemsTools(server: McpServer) {
                 };
             }
 
-            const recurringItems: RecurringItem[] = await response.json();
-            
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: JSON.stringify(recurringItems),
-                    },
-                ],
-            };
+            const data = await response.json();
+            const recurringItems: RecurringItem[] = data.recurring_items ?? data;
+
+            return formatResponse(recurringItems, input.response_format, input.response_mode, {
+                toolName: "recurring-items",
+                summary: `${recurringItems.length} recurring items`,
+            });
         }
     );
 }

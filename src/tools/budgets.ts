@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getConfig } from "../config.js";
 import { Budget } from "../types.js";
+import { responseFormatSchema, responseModeSchema, formatResponse } from "../response.js";
 
 export function registerBudgetTools(server: McpServer) {
     server.tool(
@@ -25,6 +26,8 @@ export function registerBudgetTools(server: McpServer) {
                     .describe(
                         "Currency for budget (defaults to primary currency)"
                     ),
+                response_format: responseFormatSchema,
+                response_mode: responseModeSchema,
             }),
         },
         async ({ input }) => {
@@ -58,14 +61,10 @@ export function registerBudgetTools(server: McpServer) {
 
             const budgets: Budget[] = await response.json();
 
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: JSON.stringify(budgets),
-                    },
-                ],
-            };
+            return formatResponse(budgets, input.response_format, input.response_mode, {
+                toolName: "budgets",
+                summary: `${budgets.length} budget entries (${input.start_date} to ${input.end_date})`,
+            });
         }
     );
 

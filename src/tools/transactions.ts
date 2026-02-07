@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { encode as toonEncode } from "@toon-format/toon";
 import { getConfig } from "../config.js";
 import { Transaction } from "../types.js";
+import { responseFormatSchema, responseModeSchema, formatResponse } from "../response.js";
 
 export function registerTransactionTools(server: McpServer) {
     server.tool(
@@ -61,14 +61,11 @@ export function registerTransactionTools(server: McpServer) {
                         "Set to true when you need original transaction names, " +
                         "merchant info, or Plaid category suggestions for corrections."
                     ),
-                response_format: z
-                    .enum(["json", "toon"])
-                    .optional()
-                    .default("json")
-                    .describe(
-                        "Response format: 'json' (default) or 'toon' (Token-Oriented Object Notation). " +
-                        "TOON reduces token usage by ~40% for uniform arrays. Best with include_plaid_metadata:true."
-                    ),
+                response_format: responseFormatSchema.describe(
+                    "Response format: 'json' (default) or 'toon' (Token-Oriented Object Notation). " +
+                    "TOON reduces token usage by ~40% for uniform arrays. Best with include_plaid_metadata:true."
+                ),
+                response_mode: responseModeSchema,
             }),
         },
         async ({ input }) => {
@@ -166,18 +163,10 @@ export function registerTransactionTools(server: McpServer) {
                 has_more: hasMore,
             };
 
-            const responseText = input.response_format === "toon"
-                ? toonEncode(responseData)
-                : JSON.stringify(responseData);
-
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: responseText,
-                    },
-                ],
-            };
+            return formatResponse(responseData, input.response_format, input.response_mode, {
+                toolName: "transactions",
+                summary: `${transactions.length} transactions (${totalCount} total, offset ${offset}, has_more: ${hasMore})`,
+            });
         }
     );
 
@@ -715,14 +704,8 @@ export function registerTransactionTools(server: McpServer) {
                     .describe(
                         "Include plaid_metadata in response (default: false)"
                     ),
-                response_format: z
-                    .enum(["json", "toon"])
-                    .optional()
-                    .default("json")
-                    .describe(
-                        "Response format: 'json' (default) or 'toon' (Token-Oriented Object Notation). " +
-                        "TOON reduces token usage by ~40% for uniform arrays."
-                    ),
+                response_format: responseFormatSchema,
+                response_mode: responseModeSchema,
             }),
         },
         async ({ input }) => {
@@ -787,18 +770,10 @@ export function registerTransactionTools(server: McpServer) {
                 transactions,
             };
 
-            const responseText = input.response_format === "toon"
-                ? toonEncode(responseData)
-                : JSON.stringify(responseData);
-
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: responseText,
-                    },
-                ],
-            };
+            return formatResponse(responseData, input.response_format, input.response_mode, {
+                toolName: "search-transactions",
+                summary: `${transactions.length} transactions matching "${input.query}"`,
+            });
         }
     );
 }

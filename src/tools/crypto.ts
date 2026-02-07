@@ -2,15 +2,21 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getConfig } from "../config.js";
 import { Crypto } from "../types.js";
+import { responseFormatSchema, responseModeSchema, formatResponse } from "../response.js";
 
 export function registerCryptoTools(server: McpServer) {
     server.tool(
         "get_all_crypto",
         "Get a list of all cryptocurrency assets associated with the user",
-        {},
-        async () => {
+        {
+            input: z.object({
+                response_format: responseFormatSchema,
+                response_mode: responseModeSchema,
+            }),
+        },
+        async ({ input }) => {
             const { baseUrl, lunchmoneyApiToken } = getConfig();
-            
+
             const response = await fetch(`${baseUrl}/crypto`, {
                 headers: {
                     Authorization: `Bearer ${lunchmoneyApiToken}`,
@@ -30,15 +36,11 @@ export function registerCryptoTools(server: McpServer) {
 
             const data = await response.json();
             const cryptoAssets: Crypto[] = data.crypto;
-            
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: JSON.stringify(cryptoAssets),
-                    },
-                ],
-            };
+
+            return formatResponse(cryptoAssets, input.response_format, input.response_mode, {
+                toolName: "crypto",
+                summary: `${cryptoAssets.length} crypto assets`,
+            });
         }
     );
 

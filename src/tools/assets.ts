@@ -2,15 +2,21 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getConfig } from "../config.js";
 import { Asset } from "../types.js";
+import { responseFormatSchema, responseModeSchema, formatResponse } from "../response.js";
 
 export function registerAssetTools(server: McpServer) {
     server.tool(
         "get_all_assets",
         "Get a list of all manually-managed assets associated with the user",
-        {},
-        async () => {
+        {
+            input: z.object({
+                response_format: responseFormatSchema,
+                response_mode: responseModeSchema,
+            }),
+        },
+        async ({ input }) => {
             const { baseUrl, lunchmoneyApiToken } = getConfig();
-            
+
             const response = await fetch(`${baseUrl}/assets`, {
                 headers: {
                     Authorization: `Bearer ${lunchmoneyApiToken}`,
@@ -30,15 +36,11 @@ export function registerAssetTools(server: McpServer) {
 
             const data = await response.json();
             const assets: Asset[] = data.assets;
-            
-            return {
-                content: [
-                    {
-                        type: "text",
-                        text: JSON.stringify(assets),
-                    },
-                ],
-            };
+
+            return formatResponse(assets, input.response_format, input.response_mode, {
+                toolName: "assets",
+                summary: `${assets.length} assets`,
+            });
         }
     );
 
